@@ -9,19 +9,24 @@ defmodule MainActor do
     end
 
     #default state holds count=0 and empty finger-table
-    def createChordWorkers() do
-        ChordActor.start_link({0,[]})
+    #{predecessor,successor,myHash,fingerNext,numRequests,fingerTable}
+    def createChordWorkers(main_pid) do
+        worker_pid = ChordActor.start_link({main_pid, nil, nil,0,0,0, []})
+        ChordActor.set_hash()
+        worker_pid
     end
 
-    #settingPeers
-    def setPeers() do
+    
 
-    end
+    def handle_cast(:done, {num_nodes, num_nodes_done} ) do
+        if (num_nodes_done + 1 == num_nodes) do
+            IO.puts "all done!!!"
+        end
+        {:noreply, {num_nodes, num_nodes_done+1}}
 
-    #initial chord assignment
-    def initChord() do
+   
 
-    end
+
 
 
 end
