@@ -11,8 +11,13 @@ defmodule ChordActor do
       GenServer.start_link(__MODULE__, default)
     end
   
-    def get_successor(pid, id)do
-      {successorPid, successorHash} = GenServer.call(pid, {:successor, id})
+    def find_successor(pid, id)do
+      {successorPid, successorHash} = GenServer.call(pid, {:find_successor, id})
+    end
+
+    def get_predecessor(pid) do
+        {status, pred} = GenServer.call(pid,:get_predecessor)
+        pred
     end
 
     def get_closest_preceeding_node(pid, id) do
@@ -25,6 +30,7 @@ defmodule ChordActor do
 
     def get_hash(pid) do
      {status,hash} = GenServer.call(pid,:get_hash)
+     hash
     end
 
     # stabilize
@@ -53,8 +59,8 @@ defmodule ChordActor do
     end
 
     #join
-    def join(pid) do
-        GenServer.call(pid,:join)
+    def join(joinMeWith) do
+        GenServer.call(joinMeWith,:join)
     end
 
     # Server Side (callbacks)
@@ -67,8 +73,8 @@ defmodule ChordActor do
     #################### Handle_Info #####################
     def handle_info(:stabilize, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         
-        x = successor.get_predecessor()
-        xHash = x.get_hash()
+        x = get_predecessor(successor)
+        xHash = get_hash(x)
         updatedState = 
         if (xHash > myHash && xHash < successor.get_hash()) do
             # Notify the new successor that Hey! I've become your predecessor
@@ -93,22 +99,25 @@ defmodule ChordActor do
 
     def handle_info(:check_predecessor, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         
-        Process.send_after(self(),:check_predecessor, @time_interval)
-
-        { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
+        # Process.send_after(self(),:check_predecessor, @time_interval)
+        # { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
+        
     end
 
 
     #################### Handle_Call #####################
     # create
     def handle_call(:create, _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
-        {:noreply,{main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
+        hash = get_hash(self())
+        #set successor and myHash to hash
+        {:noreply,{main_pid,nil,hash,hash,fingerNext,numRequests,fingerTable}}
     end
 
 
     # join
-    def handle_call({:join,keyHash},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
-        #TODO
+    def handle_call({:join,joinWith},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+        x = find_successor(joinWith, myHash)
+        {:noreply,{main_pid,nil,x,myHash,fingerNext,numRequests,fingerTable}}
     end
 
     # get a pid's hash
@@ -116,13 +125,18 @@ defmodule ChordActor do
         {:reply,myHash,{predecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
     end
 
+    #get a pid's predecessor
+    def handle_cast(:get_predecessor, _from, {predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+        {:reply,predecessor,{predecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
+    end
+
     # find successor
-    def handle_call({:successor, id},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} ) do
+    def handle_call({:find_successor, id},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} ) do
         res = if (id > myHash & id <= get_hash(successor)) do
             {successor, myHash}
         else
             cl_prec_node = get_closest_preceeding_node(self(), id)
-            {successor, myHash} = get_successor(get_hash(cl_prec_node), id)
+            {successor, myHash} = find_successor(cl_prec_node, id)
         end
 
         {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
@@ -144,6 +158,5 @@ defmodule ChordActor do
         {:noreply, {main_pid,newPredecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
     end
 
-    
 
 end
