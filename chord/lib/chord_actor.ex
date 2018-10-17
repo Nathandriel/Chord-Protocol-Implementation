@@ -11,21 +11,25 @@ defmodule ChordActor do
       GenServer.start_link(__MODULE__, default)
     end
   
-    def get_successor(hash)do
-      {successorPid, successorHash} = GenServer.call(pid,:get_successor)
+    def get_successor(pid, id)do
+      {successorPid, successorHash} = GenServer.call(pid, {:successor, id})
+    end
+
+    def get_closest_preceeding_node(pid, id) do
+        closest_prec_node = GenServer.call(pid, {:closest_preceeding_node, id})
     end
 
     def set_hash() do
-      ChordActor.cast(:set_hash)
+      GenServer.cast(:set_hash)
     end
 
     def get_hash(pid) do
-     {status,hash} = ChordActor.call(pid,:get_hash)
+     {status,hash} = GenServer.call(pid,:get_hash)
     end
 
-    # stabalize
-    def stabalize() do
-        Process.send_after(self,:stabalize, @time_interval)
+    # stabilize
+    def stabilize() do
+        Process.send_after(self,:stabilize, @time_interval)
     end
 
     # fix fingers
@@ -45,12 +49,12 @@ defmodule ChordActor do
 
     #notify
     def notify(sendTo,sendThis) do
-        ChordActor.cast(sendTo,{:notify,sendThis})
+        GenServer.cast(sendTo,{:notify,sendThis})
     end
 
     #join
     def join(pid) do
-        ChordActor.call(pid,:join)
+        GenServer.call(pid,:join)
     end
 
     # Server Side (callbacks)
@@ -61,7 +65,7 @@ defmodule ChordActor do
 
 
     #################### Handle_Info #####################
-    def handle_info(:stabalize, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+    def handle_info(:stabilize, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         
         x = successor.get_predecessor()
         xHash = x.get_hash()
@@ -75,27 +79,21 @@ defmodule ChordActor do
             notify(successor,self())
             { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
         end
-        Process.send_after(self,:stabalize, @time_interval)
+        Process.send_after(self,:stabilize, @time_interval)
         updatedState
         
     end
     
     def handle_info(:fix_fingers, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         
-        #if count < @limit do
-        self = self()
-        Process.send_after(self,:fix_fingers, @time_interval)
-        #end 
+        Process.send_after(self(),:fix_fingers, @time_interval)
 
         { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
     end
 
     def handle_info(:check_predecessor, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         
-        #if count < @limit do
-        self = self()
-        Process.send_after(self,:check_predecessor, @time_interval)
-        #end 
+        Process.send_after(self(),:check_predecessor, @time_interval)
 
         { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
     end
@@ -116,6 +114,24 @@ defmodule ChordActor do
     # get a pid's hash
     def handle_cast(:get_hash, _from, {predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         {:reply,myHash,{predecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
+    end
+
+    # find successor
+    def handle_call({:successor, id},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} ) do
+        res = if (id > myHash & id <= get_hash(successor)) do
+            {successor, myHash}
+        else
+            cl_prec_node = get_closest_preceeding_node(self(), id)
+            {successor, myHash} = get_successor(get_hash(cl_prec_node), id)
+        end
+
+        {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
+
+    end
+
+    def handle_call({:closest_preceeding_node, id}, _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+         
+
     end
 
     #################### Handle_Casts #####################
