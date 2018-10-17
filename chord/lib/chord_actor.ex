@@ -2,6 +2,7 @@ defmodule ChordActor do
     
     use GenServer
     @time_interval 1
+    @m 256
     ##########################################################################
     #State: {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}
     ##########################################################################
@@ -20,8 +21,8 @@ defmodule ChordActor do
         pred
     end
 
-    def get_closest_preceeding_node(pid, id) do
-        closest_prec_node = GenServer.call(pid, {:closest_preceeding_node, id})
+    def find_closest_preceeding_node(pid, id) do
+        closest_prec_node = GenServer.call(pid, {:find_closest_preceeding_node, id})
     end
 
     def set_hash() do
@@ -135,7 +136,7 @@ defmodule ChordActor do
         res = if (id > myHash & id <= get_hash(successor)) do
             {successor, myHash}
         else
-            cl_prec_node = get_closest_preceeding_node(self(), id)
+            cl_prec_node = find_closest_preceeding_node(self(), id)
             {successor, myHash} = find_successor(cl_prec_node, id)
         end
 
@@ -143,8 +144,14 @@ defmodule ChordActor do
 
     end
 
-    def handle_call({:closest_preceeding_node, id}, _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
-         
+    # find closest preceeding node
+    def handle_call({:find_closest_preceeding_node, id}, _from, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+        for i <- @m..1 do
+            #TODO f finger table entry 
+            if (f > myHash & f < id) do
+                {:reply, f, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }}
+            end
+        {:reply, self(), {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
 
     end
 
