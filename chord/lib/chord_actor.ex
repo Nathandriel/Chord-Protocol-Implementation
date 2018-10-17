@@ -19,6 +19,10 @@ defmodule ChordActor do
       ChordActor.cast(:set_hash)
     end
 
+    def get_hash(pid) do
+     {status,hash} = ChordActor.call(pid,:get_hash)
+    end
+
     # stabalize
     def stabalize() do
         Process.send_after(self,:stabalize, @time_interval)
@@ -40,8 +44,8 @@ defmodule ChordActor do
     end
 
     #notify
-    def notify(pid) do
-        ChordActor.cast(pid,:notify)
+    def notify(sendTo,sendThis) do
+        ChordActor.cast(sendTo,{:notify,sendThis})
     end
 
     #join
@@ -59,12 +63,21 @@ defmodule ChordActor do
     #################### Handle_Info #####################
     def handle_info(:stabalize, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
         
-        #if count < @limit do
-        self = self()
+        x = successor.get_predecessor()
+        xHash = x.get_hash()
+        updatedState = 
+        if (xHash > myHash && xHash < successor.get_hash()) do
+            # Notify the new successor that Hey! I've become your predecessor
+            notify(x,self())
+            { :noreply, {main_pid,predecessor,x,myHash,fingerNext,numRequests,fingerTable} }
+        else
+             # If our seccessor is still the same hence, nothing will happen in the call
+            notify(successor,self())
+            { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
+        end
         Process.send_after(self,:stabalize, @time_interval)
-        #end 
-
-        { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable} }
+        updatedState
+        
     end
     
     def handle_info(:fix_fingers, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
@@ -100,15 +113,21 @@ defmodule ChordActor do
         #TODO
     end
 
+    # get a pid's hash
+    def handle_cast(:get_hash, _from, {predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+        {:reply,myHash,{predecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
+    end
+
     #################### Handle_Casts #####################
     def handle_cast(:set_hash, {predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
-      hash = :crypto.hash(:sha256,self()) |> Base.encode16(case: :lower)
+      hash = :crypto.hash(:sha256,self()) |> Base.encode16(case: :lower) |> Integer.parse()
       {:noreply, {predecessor,successor,hash,fingerNext,numRequests,fingerTable}}  
     end
 
-    def notify(:notify,{main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
-        {:noreply, {main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
+    def notify({:notify,newPredecessor},{main_pid,predecessor,successor,myHash,fingerNext,numRequests,fingerTable}) do
+        {:noreply, {main_pid,newPredecessor,successor,myHash,fingerNext,numRequests,fingerTable}}
     end
 
+    
 
 end
