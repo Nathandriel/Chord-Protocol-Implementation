@@ -9,9 +9,9 @@ defmodule MainActor do
     end
 
     #default state holds count=0 and empty finger-table
-    #{predecessor,successor,myHash,fingerNext,numRequests,fingerTable}
+    #{predecessor,successor,myHash,fingerNext,numRequests,fingerTable(hashList, successorList)}
     def createChordWorkers(main_pid) do
-        worker_pid = ChordActor.start_link({main_pid, nil, nil,0,0,0, []})
+        worker_pid = ChordActor.start_link({main_pid, nil, nil,0,0,0, [], []})
         ChordActor.set_hash()
         worker_pid
     end
@@ -23,6 +23,7 @@ defmodule MainActor do
             IO.puts "all done!!!"
         end
         {:noreply, {num_nodes, num_nodes_done+1}}
+    end
 
    
 
