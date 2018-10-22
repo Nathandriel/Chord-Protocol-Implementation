@@ -1,7 +1,7 @@
 defmodule ChordActor do
     
     use GenServer
-    @time_interval 1
+    @time_interval 5
     @m 160
     ##########################################################################
     #State: {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}
@@ -18,12 +18,24 @@ defmodule ChordActor do
         hash
     end
   
-    #TODO changed to cast avoid deadlock
     def find_successor(pid, id)do
-      {:ok, successorPid} = GenServer.call(pid,{:find_successor, id})
+    
+      {:ok, res} = GenServer.call(pid,{:find_successor, id})
+      IO.inspect "suc in find_suc"
+      IO.inspect res
+
+        successor = case res do 
+            nil ->  IO.puts "Looking for closest prec node"
+                    closest_prec_node = find_closest_preceeding_node(pid, id)
+                    find_successor(closest_prec_node, id)
+                    
+            _   ->  res
+        end
+
+      
       IO.inspect "client"
-      IO.inspect successorPid
-      successorPid
+      IO.inspect successor
+      successor
     end
 
     def get_predecessor(pid) do
@@ -42,22 +54,23 @@ defmodule ChordActor do
 
 
     # stabilize
-    def stabilize_and_fix_fingers(pid) do
-        Process.send_after(pid,:fix_fingers,@time_interval)
+    def stabilize(pid) do
+        
         Process.send_after(pid,:stabilize,@time_interval)
         #Process.send_after(pid,:check_predecessor,@time_interval)
         
     end
 
     # fix fingers
-    def fix_fingers() do
-        Process.send_after(self,:fix_fingers, @time_interval)
+    def fix_fingers(pid) do
+        Process.send_after(pid, :fix_fingers, @time_interval)
     end
 
     def search_keys_periodically(pid) do
-        Process.send_after(pid,:stabilize,@time_interval)
+        #Process.send_after(pid,:stabilize,@time_interval)
         #Process.send_after(pid,:check_predecessor,@time_interval)
-        Process.send_after(pid,:fix_fingers,@time_interval)
+        #Process.send_after(pid,:fix_fingers,@time_interval)
+        
         Process.send_after(pid, :search_keys, @time_interval)
     end
     
@@ -76,8 +89,8 @@ defmodule ChordActor do
         GenServer.call(pid,:create)
     end
     #join
-    def join(joinMe, joinTo) do
-        GenServer.call(joinMe,{:join,joinTo})
+    def join(existing, new) do
+        GenServer.call(new,{:join,existing})
     end
 
     # Server Side (callbacks)
@@ -88,6 +101,31 @@ defmodule ChordActor do
 
 
     #################### Handle_Info #####################
+
+    def handle_info(:fix_fingers, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
+        IO.puts "Enter fix fingers"
+        index =
+        if (fingerNext > ((@m) -1) )do
+            0
+        else
+            fingerNext
+        end
+
+        id = (myHash + :math.pow(2, index-1)) |> round
+        base = Kernel.trunc(:math.pow(2, @m))
+        id_mod = rem(id, base)
+        
+        #TODO Figure out a way to update finger table without having to call the same process from itself
+        #List.update_at(successorList, index, find_successor(self(), id_mod) )
+        List.update_at(hashList, index, fn(x) -> id_mod end)
+
+        IO.puts "updated lists"
+        
+        fix_fingers(self())
+        { :noreply, {main_pid,predecessor,successor,myHash,index+1,numHops,numRequests,hashList, successorList} }
+    end
+
+
     def handle_info(:stabilize, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
         IO.puts "Enter stabilize"
         x = get_predecessor(successor)
@@ -108,28 +146,7 @@ defmodule ChordActor do
         
     end
     
-    def handle_info(:fix_fingers, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
-        IO.puts "fix finger table"
-        index =
-        if (fingerNext > ((@m) -1) )do
-            0
-        else
-            fingerNext
-        end
-
-        id = (myHash + :math.pow(2, index-1)) |> round
-        base = Kernel.trunc(:math.pow(2, @m))
-        id_mod = rem(id, base)
-        
-        #IO.inspect find_successor(self(), id_mod)
-        List.update_at(successorList, index, find_successor(self(), id_mod) )
-        List.update_at(hashList, index, fn(x) -> id_mod end)
-
-        IO.puts "updated lists"
-        
-        fix_fingers()
-        { :noreply, {main_pid,predecessor,successor,myHash,index+1,numHops,numRequests,hashList, successorList} }
-    end
+    
 
     def handle_info(:check_predecessor, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
         
@@ -148,17 +165,25 @@ defmodule ChordActor do
     #################### Handle_Call #####################
     # create
     def handle_call(:create, _from, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
+        IO.puts "Enter create"
         successor = self()
-        hash = get_hash(successor)
-        IO.puts "created and set suc"
+        hash = get_hash(self())
+        
         #set successor and myHash to hash
         {:reply,hash,{main_pid,nil,successor,hash,fingerNext,numHops,numRequests,hashList, successorList}}
     end
 
 
     # join
-    def handle_call({:join,joinTo},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
-        x = find_successor(joinTo, myHash)
+    def handle_call({:join,existing},  _from, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
+        IO.puts "Enter join"
+
+        IO.inspect "new node :"
+        IO.inspect self()
+        IO.inspect "joining to :"
+        IO.inspect existing
+
+        x = find_successor(existing, myHash)
         {:reply,{main_pid,nil,x,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
     end
 
@@ -173,36 +198,22 @@ defmodule ChordActor do
     # find successor
     def handle_call({:find_successor, id}, _from, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} ) do
         IO.puts "enter suc"
+
+        IO.inspect self()
+        IO.inspect successor
         
         res = if (id > myHash && id <= get_hash(successor)) do
-            successor
-            IO.puts "in range"
-            IO.inspect successor
-        else
+                successor
+                IO.puts "in range"
+                IO.inspect successor
+            end
             #cl_prec_node = find_closest_preceeding_node(self(), id)
-            
-            # for i <- @m..1 do
-            #     #TODO f finger table entry 
-            #     if (Enum.at(hashList, i) > myHash && Enum.at(hashList, i) < id) do
-            #         IO.puts "match cond"
-            #         #{:reply, Enum.at(successorList, m) , {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }}
-            #         node = Enum.at(successorList, i)
-            #     end
-            # end
+            # IO.inspect find_successor(cl_prec_node, id)
 
-            node = Enum.at(successorList, 0)
-
-            IO.inspect node
-
-            cl_prec_node = if !node, do: self(), else: node
-            IO.puts "debug suc"
-            IO.inspect find_successor(cl_prec_node, id)
-            IO.puts "found rabge"
-            IO.inspect successor
-        end
-        #IO.inspect res
-        {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
-
+        IO.inspect res
+        IO.puts "returned successor"
+           
+    {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
     end
 
     

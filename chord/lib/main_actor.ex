@@ -18,7 +18,9 @@ defmodule MainActor do
     def create_ring(main_pid,num_nodes, num_requests) do
         first_node = create_chord_worker(main_pid,num_requests)
         ChordActor.create(first_node)
-        ChordActor.stabilize_and_fix_fingers(first_node)
+        
+        ChordActor.fix_fingers(first_node)
+        ChordActor.stabilize(first_node)
 
         IO.puts "first actor"
         IO.inspect first_node
@@ -26,8 +28,15 @@ defmodule MainActor do
         actors = Enum.map(Enum.to_list(2..num_nodes), fn(_) -> 
                             worker_node = create_chord_worker(main_pid,num_requests)
                             ChordActor.create(worker_node)
-                            ChordActor.join(worker_node, first_node)
-                            ChordActor.stabilize_and_fix_fingers(worker_node)
+                            IO.inspect "worker node"
+                            IO.inspect worker_node
+
+                            #Join all new nodes to the first node
+                            ChordActor.join(first_node, worker_node)
+
+                            ChordActor.fix_fingers(worker_node)
+                            ChordActor.stabilize(worker_node)
+                            
                             worker_node
                         end )
         [first_node] ++ actors
@@ -48,9 +57,9 @@ defmodule MainActor do
     end
 
     #default state holds count=0 and empty finger-table
-    #{predecessor,successor,myHash,fingerNext,numRequests,fingerTable(hashList, successorList)}
+    #{predecessor,successor,myHash,fingerNext,numHops,numRequests,fingerTable(hashList, successorList)}
     def create_chord_worker(main_pid,num_requests) do
-        { :ok, worker_pid} = ChordActor.start_link({main_pid, nil, nil,0,0,0,num_requests, [], []})
+        { :ok, worker_pid} = ChordActor.start_link({main_pid, nil, nil, 0, 0, 0, num_requests, [], []})
         worker_pid
     end
 
