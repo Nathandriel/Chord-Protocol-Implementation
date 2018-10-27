@@ -23,13 +23,17 @@ defmodule MainActor do
         
         ChordActor.fix_fingers(first_node)
         ChordActor.stabilize(first_node)
-
+        prev_worker_node = first_node
+        IO.inspect "prev !!!!!!!!!!!!!!!!!!!!!!!!!"
+        IO.inspect prev_worker_node
         actors = Enum.map(Enum.to_list(2..num_nodes), fn(_) -> 
                             worker_node = create_chord_worker(main_pid,num_requests)
                             ChordActor.create(worker_node)
                             ChordActor.init_fingers(worker_node)
-                            
-
+                            ChordActor.set_predecessor(worker_node,prev_worker_node)
+                            prev_worker_node = worker_node
+                            IO.inspect "prev !!!!!!!!!!!!!!!!!!!!!!!!!"
+                            IO.inspect prev_worker_node
                             #Join all new nodes to the first node
                             ChordActor.join(first_node, worker_node)
 

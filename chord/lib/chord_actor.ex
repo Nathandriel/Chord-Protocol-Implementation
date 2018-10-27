@@ -53,6 +53,9 @@ defmodule ChordActor do
       GenServer.cast(pid,:set_hash)
     end
 
+    def set_predecessor(pid,new_pred) do
+        GenServer.cast(pid,{:set_pred,new_pred})
+    end
 
     # stabilize
     def stabilize(pid) do
@@ -113,8 +116,8 @@ defmodule ChordActor do
         updated_hash_list = List.update_at(hashList, index, fn(x) -> id_mod end)
         
         fix_fingers(self())
-        IO.inspect self()
-        IO.inspect successorList
+        # IO.inspect self()
+        # IO.inspect successorList
         { :noreply, {main_pid,predecessor,successor,myHash,index+1,numHops,numRequests,updated_hash_list, updated_suc_list} }
     end
 
@@ -163,6 +166,7 @@ defmodule ChordActor do
                 { :noreply, {main_pid,predecessor,x,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
             else
                 # If our seccessor is still the same hence, nothing will happen in the call
+                notify(successor,self())
                 { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
             end
         end
@@ -290,5 +294,7 @@ defmodule ChordActor do
         {:noreply, {main_pid,newPredecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
     end
 
-
+    def handle_cast({:set_pred,new_pred}, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
+        {:noreply, {main_pid,new_pred,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
+    end
 end
