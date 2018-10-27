@@ -116,7 +116,6 @@ defmodule ChordActor do
     end
 
     def my_find_successor(id, myHash, successor, hashList, successorList) do
-
         res = if (id > myHash && id <= get_hash(successor)) do
                 successor
             end
@@ -228,7 +227,7 @@ defmodule ChordActor do
             end
         
            
-    {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
+        {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
     end
 
     def recurse(id, myHash, hashList,successorList,i) when i==0 do
