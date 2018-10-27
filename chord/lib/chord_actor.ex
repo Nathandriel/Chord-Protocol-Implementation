@@ -178,7 +178,7 @@ defmodule ChordActor do
 
     def handle_info(:search_keys, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
         if (numRequests == 1) do
-            GenServer.cast(main_pid, :done)
+            GenServer.cast(main_pid, {:done, numHops})
         else
             rand_key_hash = Enum.random(1..round(:math.pow(2,@m)-1))
             my_find_successor(rand_key_hash, myHash, successor, hashList, successorList)
