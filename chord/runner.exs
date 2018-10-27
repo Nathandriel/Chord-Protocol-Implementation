@@ -14,6 +14,7 @@ IO.inspect main_pid
 IO.puts "******************************"
 
 all_pids = MainActor.create_ring(main_pid,num_nodes,num_requests)
+IO.inspect all_pids
 IO.puts "Created ring"
 
 

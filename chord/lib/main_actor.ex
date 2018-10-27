@@ -27,7 +27,8 @@ defmodule MainActor do
         actors = Enum.map(Enum.to_list(2..num_nodes), fn(_) -> 
                             worker_node = create_chord_worker(main_pid,num_requests)
                             ChordActor.create(worker_node)
-                            ChordActor.fix_fingers(worker_node)
+                            ChordActor.init_fingers(worker_node)
+                            
 
                             #Join all new nodes to the first node
                             ChordActor.join(first_node, worker_node)
@@ -37,6 +38,7 @@ defmodule MainActor do
                             
                             worker_node
                         end )
+
         [first_node] ++ actors
     end
 
@@ -65,7 +67,7 @@ defmodule MainActor do
     
 
     def handle_cast({:done,numHops}, {totalHops,num_nodes, num_nodes_done} ) do
-        IO.puts "received cast"
+        #IO.puts "received cast"
         if (num_nodes_done + 1 == num_nodes) do
             IO.puts "all done!!!"
         end
