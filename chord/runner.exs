@@ -17,8 +17,5 @@ all_pids = MainActor.create_ring(main_pid,num_nodes,num_requests)
 IO.puts "Created ring"
 
 
-#Enum.each(all_pids,fn(x)->ChordActor.stabilize_and_fix_fingers(x) end)
 Enum.each(all_pids, fn(x) -> ChordActor.search_keys_periodically(x) end)
 MainActor.simulate(main_pid)
-# {st,hibernate_actor_pid} = HibernateStatusActor.start_link({0,num_nodes})
-# main_pid = A2.start_up(hibernate_actor_pid,num_nodes, topology, algorithm)

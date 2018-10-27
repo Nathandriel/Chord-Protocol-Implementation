@@ -17,19 +17,17 @@ defmodule MainActor do
     #spawn nodes and create init all the nodes with their fingertables
     def create_ring(main_pid,num_nodes, num_requests) do
         first_node = create_chord_worker(main_pid,num_requests)
+        
         ChordActor.create(first_node)
+        ChordActor.init_fingers(first_node)
         
         ChordActor.fix_fingers(first_node)
         ChordActor.stabilize(first_node)
 
-        IO.puts "first actor"
-        IO.inspect first_node
-
         actors = Enum.map(Enum.to_list(2..num_nodes), fn(_) -> 
                             worker_node = create_chord_worker(main_pid,num_requests)
                             ChordActor.create(worker_node)
-                            IO.inspect "worker node"
-                            IO.inspect worker_node
+                            ChordActor.fix_fingers(worker_node)
 
                             #Join all new nodes to the first node
                             ChordActor.join(first_node, worker_node)
@@ -48,15 +46,16 @@ defmodule MainActor do
     end
 
     def simulate(pid) do
-        IO.inspect "simulate"
+        #IO.inspect "simulate"
         {status,avgHops} = GenServer.call(pid,:check_status)
         if status==false do 
+            #IO.inspect "received false status"
             simulate(pid) 
         else 
-            IO.puts "DONE DONE DONE with #{avgHops}!!" end
+            IO.puts "AVERAGE HOPS : #{avgHops}!!" end
     end
 
-    #default state holds count=0 and empty finger-table
+    #default state
     #{predecessor,successor,myHash,fingerNext,numHops,numRequests,fingerTable(hashList, successorList)}
     def create_chord_worker(main_pid,num_requests) do
         { :ok, worker_pid} = ChordActor.start_link({main_pid, nil, nil, 0, 0, 0, num_requests, [], []})
@@ -66,6 +65,7 @@ defmodule MainActor do
     
 
     def handle_cast({:done,numHops}, {totalHops,num_nodes, num_nodes_done} ) do
+        IO.puts "received cast"
         if (num_nodes_done + 1 == num_nodes) do
             IO.puts "all done!!!"
         end
