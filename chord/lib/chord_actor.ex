@@ -2,7 +2,7 @@ defmodule ChordActor do
     
     use GenServer
     @time_interval 1
-    @m 10
+    @m 160
     ##########################################################################
     #State: {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}
     ##########################################################################
@@ -18,13 +18,18 @@ defmodule ChordActor do
         hash
     end
 
+    def set_initial_state(first, second) do
+        GenServer.call(first, {:set_initial_state, second})
+        GenServer.call(second, {:set_initial_state, first})
+    end
+
     def init_fingers(pid) do
         GenServer.call(pid, :init_fingers)
     end
   
     def find_successor(existing, id, originated_from)do
 
-        res = GenServer.call(existing,{:find_successor, id, originated_from})
+        res = GenServer.call(existing,{:find_successor, id, originated_from},15000)
 
         successor = case res do 
             nil ->  closest_prec_node = find_closest_preceeding_node(existing, id)
@@ -40,12 +45,38 @@ defmodule ChordActor do
       successor
     end
 
+    def my_find_successor(id, myHash, successor, hashList, successorList, originated_from) do
+        res = if (id > myHash && id <= get_hash(successor)) do
+                successor
+            end
+        
+        suc = case res do 
+        nil ->  node = recurse(id, myHash, hashList, successorList,@m)
+                closest_prec_node = if !node, do: self(), else: node
+
+                if (closest_prec_node == self()) do
+                    #IO.inspect "Found in finger table"
+                    self()
+                else 
+                    #IO.inspect "#########################"
+                    find_successor(closest_prec_node, id, originated_from)
+                end
+                    
+        _   ->  res
+        end
+
+    
+        suc
+        
+
+    end
+
     def get_predecessor(pid) do
-        pred = GenServer.call(pid,:get_predecessor)
+        pred = GenServer.call(pid,:get_predecessor,15000)
     end
 
     def find_closest_preceeding_node(pid, id) do
-        closest_prec_node = GenServer.call(pid, {:find_closest_preceeding_node, id})
+        closest_prec_node = GenServer.call(pid, {:find_closest_preceeding_node, id},15000)
     end
 
 
@@ -70,7 +101,7 @@ defmodule ChordActor do
     
     # check predecessor
     def check_predecessor() do
-        Process.send_after(self,:check_predecessor, @time_interval)
+        Process.send_after(self(),:check_predecessor, @time_interval)
     end
 
     #notify
@@ -80,7 +111,7 @@ defmodule ChordActor do
 
     #create
     def create(pid) do
-        IO.inspect(GenServer.call(pid,:create))
+        GenServer.call(pid,:create)
     end
     
     #join
@@ -108,40 +139,18 @@ defmodule ChordActor do
         id = (myHash + :math.pow(2, index-1)) |> round
         base = Kernel.trunc(:math.pow(2, @m))
         id_mod = rem(id, base)
+
+        suc = my_find_successor(id_mod, myHash, successor, hashList, successorList, :from_fix_fingers)
+        suc_hash = get_hash(suc)
                 
-        updated_suc_list = List.update_at(successorList, index, fn(x) -> my_find_successor(id_mod, myHash, successor, hashList, successorList, :from_fix_fingers) end )
-        updated_hash_list = List.update_at(hashList, index, fn(x) -> id_mod end)
-        
+        updated_suc_list = List.update_at(successorList, index, fn(_) -> suc end )
+        updated_hash_list = List.update_at(hashList, index, fn(_) -> suc_hash end)
+
         fix_fingers(self())
-        IO.inspect self()
-        IO.inspect successorList
+
+        #IO.inspect updated_suc_list
+
         { :noreply, {main_pid,predecessor,successor,myHash,index+1,numHops,numRequests,updated_hash_list, updated_suc_list} }
-    end
-
-    def my_find_successor(id, myHash, successor, hashList, successorList, originated_from) do
-        res = if (id > myHash && id <= get_hash(successor)) do
-                successor
-            end
-        
-        suc = case res do 
-        nil ->  node = recurse(id, myHash, hashList, successorList,@m)
-                closest_prec_node = if !node, do: self, else: node
-
-                if (closest_prec_node == self()) do
-                    #IO.inspect "Found in finger table"
-                    self()
-                else 
-                    IO.inspect "#########################"
-                    find_successor(closest_prec_node, id, originated_from)
-                end
-                    
-        _   ->  res
-        end
-
-    
-        suc
-        
-
     end
 
 
@@ -155,19 +164,28 @@ defmodule ChordActor do
             #IO.puts "In stabilize: suc is not self"
             x = get_predecessor(successor)
             
-            xHash = get_hash(x)
-            updatedState = 
+            xHash = if x != nil do 
+                        get_hash(x)
+                    else 
+                        -1
+                    end
+            # IO.inspect x
+            # IO.inspect "value of xHash is #{xHash}"
+             
             if (xHash > myHash && xHash < get_hash(successor)) do
                 # Notify the new successor that Hey! I've become your predecessor
                 notify(x,self())
                 { :noreply, {main_pid,predecessor,x,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
             else
                 # If our seccessor is still the same hence, nothing will happen in the call
+                notify(successor, self())
                 { :noreply, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
             end
         end
 
-        Process.send_after(self,:stabilize, @time_interval)
+        
+        Process.send_after(self(),:stabilize, @time_interval)
+        
         updated_state
         
     end
@@ -201,13 +219,25 @@ defmodule ChordActor do
     def handle_call(:create, _from, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
         successor = self()
         hash = get_hash(self())
-
-
-        successorList = [self()] ++ successorList
-        hashList = [hash] ++ hashList
         
-        #set successor and myHash to hash
+        #set values of successor and myHash
         {:reply,hash,{main_pid,nil,successor,hash,fingerNext,numHops,numRequests,hashList, successorList}}
+    end
+
+    def handle_call({:set_initial_state, other}, _from, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
+        suc = if (get_hash(other) > myHash) do
+                    other
+                else
+                    self()
+                end
+
+        prec = if (get_hash(other) < myHash) do
+                    other
+            else
+                nil
+            end
+
+        {:reply,:foo,{main_pid,prec,suc,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
     end
 
 
@@ -232,9 +262,9 @@ defmodule ChordActor do
         res = if (id > myHash && id <= get_hash(successor)) do
                 successor
             end
-        IO.inspect "Incoming call from  #{originated_from} "
+        #IO.inspect "Incoming call from  #{originated_from} "
         if originated_from == :from_search do 
-        IO.inspect "entered find suc from_search"  
+        #IO.inspect "entered find suc from_search"  
         {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numHops+1,numRequests,hashList, successorList} }
         else
         {:reply, res, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
@@ -260,7 +290,7 @@ defmodule ChordActor do
         
         node = recurse(id, myHash, hashList,successorList,@m)
         
-        cl_prec_node = if !node, do: self, else: node
+        cl_prec_node = if !node, do: self(), else: node
 
         {:reply, cl_prec_node, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList} }
 
@@ -287,7 +317,18 @@ defmodule ChordActor do
     end
 
     def handle_cast({:notify,newPredecessor}, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do 
-        {:noreply, {main_pid,newPredecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
+        new_pred_hash = get_hash(newPredecessor)
+        pred_hash = if predecessor != nil do
+                        get_hash(predecessor)
+                    else
+                        -1
+                    end
+
+        if (predecessor == nil || (new_pred_hash > pred_hash && new_pred_hash < myHash) ) do
+            {:noreply, {main_pid,newPredecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
+        else
+            {:noreply, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}}
+        end
     end
 
 

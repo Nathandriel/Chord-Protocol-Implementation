@@ -14,32 +14,41 @@ defmodule MainActor do
       {:ok, args}
     end
 
-    #spawn nodes and create init all the nodes with their fingertables
+    #spawn nodes and init all the nodes with their fingertables
     def create_ring(main_pid,num_nodes, num_requests) do
         first_node = create_chord_worker(main_pid,num_requests)
-        
         ChordActor.create(first_node)
-        ChordActor.init_fingers(first_node)
-        
-        ChordActor.fix_fingers(first_node)
-        ChordActor.stabilize(first_node)
 
-        actors = Enum.map(Enum.to_list(2..num_nodes), fn(_) -> 
+        #test
+        second_node = create_chord_worker(main_pid,num_requests)
+        ChordActor.create(second_node)
+
+        ChordActor.set_initial_state(first_node, second_node)
+
+        ChordActor.stabilize(first_node)
+        ChordActor.init_fingers(first_node)
+        ChordActor.fix_fingers(first_node)
+
+        ChordActor.stabilize(second_node)
+        ChordActor.init_fingers(second_node)
+        ChordActor.fix_fingers(second_node)        
+
+        actors = Enum.map(Enum.to_list(3..num_nodes), fn(_) -> 
                             worker_node = create_chord_worker(main_pid,num_requests)
                             ChordActor.create(worker_node)
-                            ChordActor.init_fingers(worker_node)
-                            
 
                             #Join all new nodes to the first node
                             ChordActor.join(first_node, worker_node)
-
-                            ChordActor.fix_fingers(worker_node)
                             ChordActor.stabilize(worker_node)
+                            
+                            ChordActor.init_fingers(worker_node)
+                            ChordActor.fix_fingers(worker_node)
+                            
                             
                             worker_node
                         end )
 
-        [first_node] ++ actors
+        [first_node, second_node] ++ actors
     end
 
     # find key
@@ -49,16 +58,18 @@ defmodule MainActor do
 
     def simulate(pid) do
         #IO.inspect "simulate"
-        {status,avgHops} = GenServer.call(pid,:check_status)
+        {status,total_hops, num_nodes} = GenServer.call(pid,:check_status)
         if status==false do 
             #IO.inspect "received false status"
             simulate(pid) 
         else 
-            IO.puts "AVERAGE HOPS : #{avgHops}!!" end
+            IO.puts "Total Hops : #{total_hops}"
+            avg_hops = total_hops/num_nodes
+            IO.puts "AVERAGE HOPS : #{avg_hops}!!" end
     end
 
     #default state
-    #{predecessor,successor,myHash,fingerNext,numHops,numRequests,fingerTable(hashList, successorList)}
+    #{main_pid, predecessor,successor,myHash,fingerNext,numHops,numRequests,fingerTable(hashList, successorList)}
     def create_chord_worker(main_pid,num_requests) do
         { :ok, worker_pid} = ChordActor.start_link({main_pid, nil, nil, 0, 0, 0, num_requests, [], []})
         worker_pid
@@ -84,7 +95,7 @@ defmodule MainActor do
             else 
                 false 
             end
-        {:reply,{done,total_hops/num_nodes},{total_hops,num_nodes, num_nodes_done}}
+        {:reply,{done,total_hops,num_nodes},{total_hops,num_nodes, num_nodes_done}}
     end
 
 end
