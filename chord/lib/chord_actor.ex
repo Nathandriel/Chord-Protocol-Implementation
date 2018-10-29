@@ -202,7 +202,7 @@ defmodule ChordActor do
     def handle_info(:search_keys, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests,hashList, successorList}) do
         #IO.inspect "SEARCHING KEYS**********************"
         if (numRequests == 1) do
-            GenServer.cast(main_pid, {:done, numHops})
+            GenServer.cast(main_pid, {:done, numHops+1})
         else
             #IO.inspect "MOre requests to make"
             rand_key_hash = Enum.random(1..round(:math.pow(2,@m)-1))
@@ -210,7 +210,7 @@ defmodule ChordActor do
             search_keys_periodically(self())
         end
         #decrement numRequests by 1 after every search is made
-        {:noreply, {main_pid,predecessor,successor,myHash,fingerNext,numHops,numRequests-1,hashList, successorList} }
+        {:noreply, {main_pid,predecessor,successor,myHash,fingerNext,numHops+1,numRequests-1,hashList, successorList} }
     end
 
 

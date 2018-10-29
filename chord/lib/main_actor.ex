@@ -56,15 +56,15 @@ defmodule MainActor do
         GenServer.call(self(),:search)
     end
 
-    def simulate(pid) do
+    def simulate(pid,num_requests) do
         #IO.inspect "simulate"
         {status,total_hops, num_nodes} = GenServer.call(pid,:check_status)
         if status==false do 
             #IO.inspect "received false status"
-            simulate(pid) 
+            simulate(pid,num_requests) 
         else 
-            IO.puts "Total Hops : #{total_hops}"
-            avg_hops = total_hops/num_nodes
+            #IO.puts "Total Hops : #{total_hops}"
+            avg_hops = total_hops/(num_nodes*num_requests)
             IO.puts "AVERAGE HOPS : #{avg_hops}!!" end
     end
 

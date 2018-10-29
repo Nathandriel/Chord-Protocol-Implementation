@@ -18,4 +18,4 @@ all_pids = MainActor.create_ring(main_pid,num_nodes,num_requests)
 IO.puts "Created ring"
 
 Enum.each(all_pids, fn(x) -> ChordActor.search_keys_periodically(x) end)
-MainActor.simulate(main_pid)
+MainActor.simulate(main_pid,num_requests)
